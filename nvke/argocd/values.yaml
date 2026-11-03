@@ -1,0 +1,23 @@
+# Argo CD on the NVKE lab cluster (omerfsen/nvke on KVM).
+#
+# Chart: argo-cd 10.11.6 from https://argoproj.github.io/argo-helm
+#        (Argo CD v3.5.6; index.yaml digest
+#        d8f096d87513b41ff754053a7f9604c943bf29c15436a79226fd51595ea67d05)
+#
+#   helm upgrade --install argocd argo-cd \
+#     --repo https://argoproj.github.io/argo-helm --version 10.11.6 \
+#     --namespace argocd --create-namespace -f nvke/argocd/values.yaml
+#
+# A lab: one replica of everything, no ingress (reach the UI with
+# kubectl port-forward), no SSO, no notifications.
+
+configs:
+  params:
+    # TLS ends at kubectl port-forward; nothing exposes the server.
+    server.insecure: true
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
