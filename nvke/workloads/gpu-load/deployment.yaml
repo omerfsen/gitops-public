@@ -1,7 +1,7 @@
 # A steady GPU load for the lab: fp16 matrix multiplies on the RTX 4080 in
 # bursts (LOAD_SECONDS busy, IDLE_SECONDS idle), printing the measured
 # TFLOPS after each burst. Scheduled by the KAI scheduler AICR installs, in
-# its default queue. Watch it:
+# its default queue at the preemptible train priority. Watch it:
 #   kubectl -n gpu-load logs -f deploy/gpu-load
 # and in Grafana / Prometheus: DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_POWER_USAGE.
 # Stop it by setting replicas: 0 here (Argo CD reverts a kubectl scale).
@@ -27,6 +27,11 @@ spec:
         kai.scheduler/queue: default-queue
     spec:
       schedulerName: kai-scheduler
+      # Preemptible: a Deployment defaults to KAI's inference priority (125),
+      # which is non-preemptible and limited to the queue's quota, and
+      # default-queue has none. train (50) may use idle GPUs and gives way
+      # to higher-priority work.
+      priorityClassName: train
       terminationGracePeriodSeconds: 5
       containers:
         - name: matmul
