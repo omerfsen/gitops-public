@@ -1,0 +1,36 @@
+{{- if dig "includeRootApp" true (.Values.deployer | default dict) -}}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.appName | default "aicr-stack" | quote }}
+  namespace: argocd
+spec:
+  project: default
+  source:
+{{- $repoURL := required "repoURL is required: pass --set repoURL=<parent namespace> (e.g., oci://<registry>/<path> or https://charts.example.com) — do NOT include the chart name; this template assembles the full reference itself" .Values.repoURL | trimSuffix "/" }}
+{{- if hasPrefix "oci://" $repoURL }}
+    repoURL: {{ printf "%s/%s" $repoURL .Chart.Name | quote }}
+    targetRevision: {{ .Values.targetRevision | default .Chart.Version | quote }}
+    path: "."
+{{- else }}
+    repoURL: {{ $repoURL | quote }}
+    chart: {{ .Chart.Name | quote }}
+    targetRevision: {{ .Values.targetRevision | default .Chart.Version | quote }}
+{{- end }}
+    helm:
+      valuesObject:
+{{ toYaml .Values | indent 8 }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # ServerSideApply: required for charts whose CRDs exceed kubectl's
+      # 262144-byte client-side annotation cap. See application.yaml.tmpl
+      # in the upstream argocd deployer for the full rationale.
+      - ServerSideApply=true
+{{- end }}

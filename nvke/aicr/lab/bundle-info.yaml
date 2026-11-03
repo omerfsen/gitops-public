@@ -1,0 +1,82 @@
+apiVersion: aicr.run/v1
+build:
+  deployer: argocd-helm
+  recipe:
+    digest: sha256:80652d027453cb813d7a6a5adefd60f3d9f95c77cdae1b9f5249d899854ea3a4
+    path: recipe.yaml
+    version: 1.2.0
+  settings:
+    appName: aicr-stack
+    attested: false
+    checksums: true
+    nodeScheduling:
+      accelerated:
+        tolerations:
+          - operator: Exists
+      system:
+        tolerations:
+          - operator: Exists
+    readinessHooks: false
+    serial: false
+    vendorCharts: false
+kind: BundleInfo
+layout:
+  entrypoint: Chart.yaml
+  releases:
+    - component: nodewright-operator
+      manifest: templates/nodewright-operator.yaml
+      name: nodewright-operator
+      namespace: nodewright
+      path: 001-nodewright-operator
+    - component: prometheus-operator-crds
+      manifest: templates/prometheus-operator-crds.yaml
+      name: prometheus-operator-crds
+      namespace: monitoring
+      path: 002-prometheus-operator-crds
+    - component: cert-manager
+      manifest: templates/cert-manager.yaml
+      name: cert-manager
+      namespace: cert-manager
+      path: 003-cert-manager
+    - component: kube-prometheus-stack
+      manifest: templates/kube-prometheus-stack.yaml
+      name: kube-prometheus-stack
+      namespace: monitoring
+      path: 004-kube-prometheus-stack
+    - component: k8s-ephemeral-storage-metrics
+      manifest: templates/k8s-ephemeral-storage-metrics.yaml
+      name: k8s-ephemeral-storage-metrics
+      namespace: monitoring
+      path: 005-k8s-ephemeral-storage-metrics
+    - component: nfd
+      manifest: templates/nfd.yaml
+      name: nfd
+      namespace: node-feature-discovery
+      path: 006-nfd
+    - component: gpu-operator
+      manifest: templates/gpu-operator.yaml
+      name: gpu-operator
+      namespace: gpu-operator
+      path: 007-gpu-operator
+    - component: kai-scheduler
+      manifest: templates/kai-scheduler.yaml
+      name: kai-scheduler
+      namespace: kai-scheduler
+      path: 008-kai-scheduler
+    - component: nvidia-dra-driver-gpu
+      manifest: templates/nvidia-dra-driver-gpu.yaml
+      name: nvidia-dra-driver-gpu
+      namespace: nvidia-dra-driver
+      path: 009-nvidia-dra-driver-gpu
+    - component: nvsentinel
+      manifest: templates/nvsentinel.yaml
+      name: nvsentinel
+      namespace: nvsentinel
+      path: 010-nvsentinel
+    - component: prometheus-adapter
+      manifest: templates/prometheus-adapter.yaml
+      name: prometheus-adapter
+      namespace: monitoring
+      path: 011-prometheus-adapter
+metadata:
+  version: 1.2.0
