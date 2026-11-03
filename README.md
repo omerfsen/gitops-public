@@ -14,6 +14,7 @@ VMs, one GeForce RTX 4080 SUPER passed through to one of them).
 | `nvke/argocd/values.yaml` | Argo CD itself: Helm values and the pinned chart version |
 | `nvke/apps/aicr-lab.yaml` | The Application that watches `nvke/aicr/lab` |
 | `nvke/aicr/lab/` | The GPU stack: NVIDIA AI Cluster Runtime's `nvke` recipe as an Argo CD Helm chart. Generated, do not edit by hand |
+| `nvke/apps/gpu-load.yaml`, `nvke/workloads/gpu-load/` | A steady GPU load: PyTorch fp16 matmuls on the RTX 4080 (50 s on, 10 s off) through the KAI scheduler at the preemptible `train` priority. Optional: apply the Application to start it, set `replicas: 0` to stop it |
 
 ### Bootstrap
 
