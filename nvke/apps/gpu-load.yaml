@@ -1,0 +1,23 @@
+# A steady GPU load on the lab cluster (nvke/workloads/gpu-load): PyTorch
+# matmuls on the RTX 4080 through the KAI scheduler. Delete this Application
+# (or set replicas: 0 in the Deployment) to stop it.
+#
+#   kubectl apply -f nvke/apps/gpu-load.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-load
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/omerfsen/gitops-public.git
+    targetRevision: main
+    path: nvke/workloads/gpu-load
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-load
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
