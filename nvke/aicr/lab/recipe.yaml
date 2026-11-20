@@ -160,7 +160,7 @@ componentRefs:
     source: https://charts.jetstack.io
     type: Helm
     valuesFile: components/cert-manager/values.yaml
-    version: v1.20.2
+    version: v1.21.3
   - chart: gpu-operator
     dependencyRefs:
       - nfd
@@ -628,13 +628,10 @@ componentRefs:
       # 2. The Prometheus CR (kube-prometheus-prometheus) reports Available=True.
       #    This explicitly catches operator-level reconcile stalls (e.g., webhook
       #    rejections) where a target StatefulSet might never be created at all.
-      # 3. The Alertmanager CR (kube-prometheus-alertmanager) reports Available=True.
-      # 4. The Prometheus StatefulSet (prometheus-kube-prometheus-prometheus) has
+      # 3. The Prometheus StatefulSet (prometheus-kube-prometheus-prometheus) has
       #    reached full rollout: readyReplicas >= replicas, with a replicas > 0
       #    vacuous-pass guard so a missing StatefulSet does not silently pass.
-      # 5. The Alertmanager StatefulSet (alertmanager-kube-prometheus-alertmanager)
-      #    reaches the same full-rollout threshold.
-      # 6. No stack operator pods (label-scoped to app.kubernetes.io/name:
+      # 4. No stack operator pods (label-scoped to app.kubernetes.io/name:
       #    kube-prometheus-stack) are stuck in Pending, Failed, Unknown, or a
       #    known-bad container-waiting reason (CrashLoopBackOff, ImagePullBackOff,
       #    ErrImagePull, CreateContainerConfigError).
@@ -685,21 +682,6 @@ componentRefs:
                     status:
                       (conditions[?type == 'Available']):
                         - status: "True"
-          - name: validate-alertmanager-cr-available
-            try:
-              # Assert the Alertmanager CR has been reconciled by the operator.
-              # CR name kube-prometheus-alertmanager derives from the chart's
-              # fullnameOverride=kube-prometheus + the chart's -alertmanager suffix.
-              - assert:
-                  resource:
-                    apiVersion: monitoring.coreos.com/v1
-                    kind: Alertmanager
-                    metadata:
-                      name: kube-prometheus-alertmanager
-                      namespace: monitoring
-                    status:
-                      (conditions[?type == 'Available']):
-                        - status: "True"
           - name: validate-prometheus-statefulset-ready
             try:
               # Assert the Prometheus StatefulSet created by the operator has
@@ -715,23 +697,6 @@ componentRefs:
                     kind: StatefulSet
                     metadata:
                       name: prometheus-kube-prometheus-prometheus
-                      namespace: monitoring
-                    status:
-                      (replicas > `0`): true
-                      (readyReplicas >= replicas): true
-          - name: validate-alertmanager-statefulset-ready
-            try:
-              # Assert the Alertmanager StatefulSet has reached full rollout.
-              # Same pattern as Prometheus above. StatefulSet name
-              # alertmanager-kube-prometheus-alertmanager is <workload>-<cr-name>
-              # per prometheus-operator convention, verified from
-              # tests/chainsaw/ai-conformance/common/assert-monitoring.yaml.
-              - assert:
-                  resource:
-                    apiVersion: apps/v1
-                    kind: StatefulSet
-                    metadata:
-                      name: alertmanager-kube-prometheus-alertmanager
                       namespace: monitoring
                     status:
                       (replicas > `0`): true
@@ -809,7 +774,7 @@ componentRefs:
     source: https://prometheus-community.github.io/helm-charts
     type: Helm
     valuesFile: components/kube-prometheus-stack/values.yaml
-    version: 84.4.0
+    version: 84.5.0
   - chart: node-feature-discovery
     dependencyRefs:
       - prometheus-operator-crds
@@ -965,6 +930,410 @@ componentRefs:
     type: Helm
     valuesFile: components/nfd/values.yaml
     version: 0.20.1
+  - chart: nktp
+    dependencyRefs:
+      - cert-manager
+      - prometheus-operator-crds
+      - kube-prometheus-stack
+    healthCheckAsserts: |
+      # Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+      #
+      # Licensed under the Apache License, Version 2.0 (the "License");
+      # you may not use this file except in compliance with the License.
+      # You may obtain a copy of the License at
+      #
+      #     http://www.apache.org/licenses/LICENSE-2.0
+      #
+      # Unless required by applicable law or agreed to in writing, software
+      # distributed under the License is distributed on an "AS IS" BASIS,
+      # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      # See the License for the specific language governing permissions and
+      # limitations under the License.
+
+      # NKTP Health Check (ADR-026)
+      #
+      # Nothing inside the release is sequenced, and the operator builds the
+      # collectors only once it runs, so a deployer can report the release ready
+      # before any collector exists. This check, not the deployer, confirms the
+      # pipeline is up.
+      #
+      # A check cannot read the recipe's values, so otel-lgtm counts as enabled when
+      # its lgtm Service exists, which the chart renders only then. Deleting both
+      # that Service and its Deployment by hand passes.
+      #
+      # Names assume release and namespace nktp, chart 0.2.0. A recipe that
+      # relocates the namespace, renames workloads, or disables a bundled exporter
+      # must supply matching healthCheckAsserts.
+      #
+      # Each rollout predicate mirrors Kubernetes' completion condition for its
+      # kind, with a desired-count floor so an empty workload cannot pass; the
+      # updated counts and revision pair rule out pods of the previous revision
+      # mid-upgrade. Omitempty status fields default to zero so their absence fails.
+      # Each condition is its own expression so a failure names it.
+      apiVersion: chainsaw.kyverno.io/v1alpha1
+      kind: Test
+      metadata:
+        name: nktp-health-check
+      spec:
+        timeouts:
+          assert: 5m
+        steps:
+          - name: validate-collector-crd-established
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apiextensions.k8s.io/v1
+                    kind: CustomResourceDefinition
+                    metadata:
+                      name: opentelemetrycollectors.opentelemetry.io
+                    ((status.conditions || `[]`)[?type == 'Established' && status == 'True'] | length(@) > `0`): true
+          - name: validate-operator
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-operator
+                      namespace: nktp
+                    <<: &deployment-rollout
+                      ((spec.replicas || `0`) > `0`): true
+                      ((status.replicas || `0`) == spec.replicas): true
+                      ((status.availableReplicas || `0`) == spec.replicas): true
+                      ((status.updatedReplicas || `0`) == spec.replicas): true
+                      ((status.observedGeneration || `0`) == metadata.generation): true
+          - name: validate-collector-statefulsets
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-gateway-metrics-collector
+                      namespace: nktp
+                    <<: &statefulset-rollout
+                      ((spec.replicas || `0`) > `0`): true
+                      ((status.readyReplicas || `0`) == spec.replicas): true
+                      ((status.updatedReplicas || `0`) == spec.replicas): true
+                      (status.currentRevision == status.updateRevision): true
+                      ((status.observedGeneration || `0`) == metadata.generation): true
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-gateway-logs-collector
+                      namespace: nktp
+                    <<: *statefulset-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-gateway-traces-collector
+                      namespace: nktp
+                    <<: *statefulset-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-watchdog-collector
+                      namespace: nktp
+                    <<: *statefulset-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-large-target-metrics-collector
+                      namespace: nktp
+                    <<: *statefulset-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: StatefulSet
+                    metadata:
+                      name: nktp-cluster-events-collector
+                      namespace: nktp
+                    <<: *statefulset-rollout
+          - name: validate-node-collector-daemonset
+            try:
+              # desiredNumberScheduled and numberReady are always serialized;
+              # updatedNumberScheduled and observedGeneration are omitempty.
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: DaemonSet
+                    metadata:
+                      name: nktp-daemonset-collector
+                      namespace: nktp
+                    <<: &daemonset-rollout
+                      (status.desiredNumberScheduled > `0`): true
+                      (status.numberReady == status.desiredNumberScheduled): true
+                      ((status.updatedNumberScheduled || `0`) == status.desiredNumberScheduled): true
+                      ((status.observedGeneration || `0`) == metadata.generation): true
+          - name: validate-target-allocators
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-daemonset-targetallocator
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-large-target-metrics-targetallocator
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-watchdog-targetallocator
+                      namespace: nktp
+                    <<: *deployment-rollout
+          - name: validate-kube-state-metrics
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: DaemonSet
+                    metadata:
+                      name: nktp-ksm-pods
+                      namespace: nktp
+                    <<: *daemonset-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-unscheduled-pods-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-workloads-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-networking-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-storage-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-configuration-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-ksm-cluster-0
+                      namespace: nktp
+                    <<: *deployment-rollout
+          - name: validate-node-exporter
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: DaemonSet
+                    metadata:
+                      name: nktp-node-exporter
+                      namespace: nktp
+                    <<: *daemonset-rollout
+          - name: validate-resource-metrics-api
+            try:
+              - assert:
+                  resource:
+                    apiVersion: apiregistration.k8s.io/v1
+                    kind: APIService
+                    metadata:
+                      name: v1beta1.metrics.k8s.io
+                    ((status.conditions || `[]`)[?type == 'Available' && status == 'True'] | length(@) > `0`): true
+          - name: validate-otel-lgtm-serving
+            try:
+              # Selected by label because the slice name is generated; no slice
+              # (otel-lgtm disabled) passes. An absent ready condition counts as
+              # ready, as the EndpointSlice API defines.
+              - error:
+                  resource:
+                    apiVersion: discovery.k8s.io/v1
+                    kind: EndpointSlice
+                    metadata:
+                      namespace: nktp
+                      labels:
+                        kubernetes.io/service-name: lgtm
+                    ((endpoints || `[]`)[?conditions.ready != `false`] | length(@) > `0`): false
+          - name: validate-optional-workloads
+            try:
+              # Both are optional, so each uses the error op: NotFound passes, and the
+              # executor fails closed on any other fetch error. `> `0`: false`
+              # because JMESPath equality between an int64 field and a numeric
+              # literal is type-strict and never matches.
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: lgtm
+                      namespace: nktp
+                    <<: &optional-scaled-to-zero
+                      ((spec.replicas || `0`) > `0`): false
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: lgtm
+                      namespace: nktp
+                    <<: &optional-unavailable
+                      ((status.availableReplicas || `0`) < spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: lgtm
+                      namespace: nktp
+                    <<: &optional-not-updated
+                      ((status.updatedReplicas || `0`) < spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: lgtm
+                      namespace: nktp
+                    <<: &optional-leftover-pods
+                      ((status.replicas || `0`) > spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: lgtm
+                      namespace: nktp
+                    <<: &optional-stale-generation
+                      ((status.observedGeneration || `0`) < metadata.generation): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-metrics-server
+                      namespace: nktp
+                    <<: *optional-scaled-to-zero
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-metrics-server
+                      namespace: nktp
+                    <<: *optional-unavailable
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-metrics-server
+                      namespace: nktp
+                    <<: *optional-not-updated
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-metrics-server
+                      namespace: nktp
+                    <<: *optional-leftover-pods
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nktp-metrics-server
+                      namespace: nktp
+                    <<: *optional-stale-generation
+          - name: validate-all-pods-healthy
+            try:
+              # The namespace holds only this release. Collector sidecars are native
+              # sidecars, so a crashing one shows only in initContainerStatuses.
+              - error:
+                  resource:
+                    apiVersion: v1
+                    kind: Pod
+                    metadata:
+                      namespace: nktp
+                    status:
+                      phase: Pending
+              - error:
+                  resource:
+                    apiVersion: v1
+                    kind: Pod
+                    metadata:
+                      namespace: nktp
+                    status:
+                      phase: Failed
+              - error:
+                  resource:
+                    apiVersion: v1
+                    kind: Pod
+                    metadata:
+                      namespace: nktp
+                    status:
+                      phase: Unknown
+              - error:
+                  resource:
+                    apiVersion: v1
+                    kind: Pod
+                    metadata:
+                      namespace: nktp
+                    status:
+                      ((containerStatuses || `[]`)[?state.waiting.reason == 'CrashLoopBackOff' || state.waiting.reason == 'ImagePullBackOff' || state.waiting.reason == 'ErrImagePull' || state.waiting.reason == 'CreateContainerConfigError'] | length(@) > `0`): true
+              - error:
+                  resource:
+                    apiVersion: v1
+                    kind: Pod
+                    metadata:
+                      namespace: nktp
+                    status:
+                      ((initContainerStatuses || `[]`)[?state.waiting.reason == 'CrashLoopBackOff' || state.waiting.reason == 'ImagePullBackOff' || state.waiting.reason == 'ErrImagePull' || state.waiting.reason == 'CreateContainerConfigError'] | length(@) > `0`): true
+    name: nktp
+    namespace: nktp
+    overrides:
+      metrics-server:
+        enabled: true
+    source: https://helm.ngc.nvidia.com/nvidia
+    type: Helm
+    valuesFile: components/nktp/values.yaml
+    version: 0.2.0
   - chart: nodewright
     healthCheckAsserts: |
       # Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
@@ -1097,7 +1466,7 @@ componentRefs:
     source: oci://ghcr.io/nvidia/nodewright/charts
     type: Helm
     valuesFile: components/nodewright-operator/values.yaml
-    version: v0.20.0
+    version: v0.21.0
   - chart: dra-driver-nvidia-gpu
     dependencyRefs:
       - gpu-operator
@@ -1479,11 +1848,13 @@ componentRefs:
               # -remediation mixins turn on, the health-events-analyzer the
               # nvsentinel-health-events-analyzer mixin adds, the event-exporter the
               # nvsentinel-event-exporter mixin adds, the in-cluster file server the
-              # nvsentinel-log-collector mixin adds, and the lifecycle-manager the
-              # nvsentinel-node-validation mixin adds; the datastore the others read
-              # is checked by nvsentinel-mongodb's own health check. Negative form,
-              # as above: off in every shipped recipe, so each op passes on a 404 and
-              # fails only when the workload renders without a complete rollout.
+              # nvsentinel-log-collector mixin adds, the lifecycle-manager the
+              # nvsentinel-node-validation mixin adds, and the csp-health-monitor the
+              # nvsentinel-csp-health-monitor-aws and -gcp mixins add; the datastore
+              # the others read is checked by nvsentinel-mongodb's own health check.
+              # Negative form, as above: off in every shipped recipe, so each op
+              # passes on a 404 and fails only when the workload renders without a
+              # complete rollout.
               # The status counters are omitempty, hence the `|| 0`.
               # updatedReplicas catches pods still on the previous revision, and
               # replicas above spec a Deployment whose old ReplicaSet has not
@@ -1776,6 +2147,38 @@ componentRefs:
                       name: lifecycle-manager
                       namespace: nvsentinel
                     ((status.observedGeneration || `0`) < metadata.generation): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: csp-health-monitor
+                      namespace: nvsentinel
+                    ((status.readyReplicas || `0`) < spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: csp-health-monitor
+                      namespace: nvsentinel
+                    ((status.updatedReplicas || `0`) < spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: csp-health-monitor
+                      namespace: nvsentinel
+                    ((status.replicas || `0`) > spec.replicas): true
+              - error:
+                  resource:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: csp-health-monitor
+                      namespace: nvsentinel
+                    ((status.observedGeneration || `0`) < metadata.generation): true
           - name: validate-all-pods-healthy
             try:
               # Assert no pods are in unhealthy phases (Pending / Failed /
@@ -1844,7 +2247,7 @@ componentRefs:
     source: oci://ghcr.io/nvidia
     type: Helm
     valuesFile: components/nvsentinel/values.yaml
-    version: v1.28.0
+    version: v1.31.0
   - chart: prometheus-adapter
     dependencyRefs:
       - kube-prometheus-stack
@@ -2100,6 +2503,7 @@ deploymentOrder:
   - nfd
   - gpu-operator
   - kai-scheduler
+  - nktp
   - nvidia-dra-driver-gpu
   - nvsentinel
   - prometheus-adapter
@@ -2109,7 +2513,7 @@ metadata:
     - base
     - monitoring-hpa
     - nvke
-  version: 1.2.0
+  version: 1.3.0
 validation:
   conformance:
     checks:

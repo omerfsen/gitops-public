@@ -2,4 +2,4 @@ apiVersion: v2
 name: "aicr-bundle"
 description: AICR deployment bundle with dynamic install-time values
 type: application
-version: "1.2.0"
+version: "1.3.0"

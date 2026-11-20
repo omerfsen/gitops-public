@@ -21,7 +21,7 @@ spec:
                 {{- $dynamic := index .Values "nodewright" | default dict -}}
                 {{- mustMergeOverwrite $static $dynamic | toYaml | nindent 16 }}
         repoURL: oci://ghcr.io/nvidia/nodewright/charts/nodewright
-        targetRevision: v0.20.0
+        targetRevision: v0.21.0
     syncPolicy:
         automated:
             prune: true

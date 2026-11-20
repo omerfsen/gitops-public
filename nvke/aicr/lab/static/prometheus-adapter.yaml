@@ -69,6 +69,17 @@ rules:
           exported_pod:
             resource: pod
       seriesQuery: DCGM_FI_DEV_FB_USED{exported_namespace!="",exported_pod!=""}
+    - metricsQuery: max(last_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>)
+      name:
+        as: ai_conformance_hpa_queue_depth
+        matches: ^ai_conformance_hpa_queue_depth$
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      seriesQuery: ai_conformance_hpa_queue_depth{namespace!="",pod!=""}
   default: false
   external:
     - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL[2m]))

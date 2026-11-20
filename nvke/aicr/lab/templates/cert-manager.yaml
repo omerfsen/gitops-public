@@ -21,7 +21,7 @@ spec:
                 {{- $dynamic := index .Values "certmanager" | default dict -}}
                 {{- mustMergeOverwrite $static $dynamic | toYaml | nindent 16 }}
         repoURL: https://charts.jetstack.io
-        targetRevision: 1.20.2
+        targetRevision: 1.21.3
     syncPolicy:
         automated:
             prune: true
