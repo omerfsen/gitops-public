@@ -15,8 +15,10 @@ for the `argocd-helm` deployer. A fresh install can skip this.
 | Component | Verdict | Applies when upgrading from |
 |-----------|---------|-----------------------------|
 | nodewright-operator | manual | `<0.18.0` |
+| kube-prometheus-stack | manual | `<84.5.0` |
 | nfd | manual | `>=0.19.0 <0.20.1` |
-| nvsentinel | manual | `>=1.25.0 <1.28.0` |
+| nktp | manual | `<0.2.0` |
+| nvsentinel | manual | `>=1.28.0 <1.31.0` |
 
 ## Deploy
 

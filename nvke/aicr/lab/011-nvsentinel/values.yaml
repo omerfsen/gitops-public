@@ -14,6 +14,30 @@ global:
 janitor-provider:
   csp:
     provider: generic
+labeler:
+  expectedDeviceCounts:
+    classes:
+      - currentExpression: |
+          int(node.metadata.labels['nvidia.com/gpu.count'])
+        enabled: true
+        expectedCountOverrides: []
+        groupingLabels:
+          - node.kubernetes.io/instance-type
+          - nvidia.com/gpu.product
+        labels:
+          current: nvsentinel.dgxc.nvidia.com/gpu.count.current
+          expected: nvsentinel.dgxc.nvidia.com/gpu.count.expected
+        name: gpu
+      - currentExpression: |
+          int(node.status.allocatable['nvidia.com/mlnxnics'])
+        enabled: true
+        expectedCountOverrides: []
+        groupingLabels:
+          - node.kubernetes.io/instance-type
+        labels:
+          current: nvsentinel.dgxc.nvidia.com/nic.count.current
+          expected: nvsentinel.dgxc.nvidia.com/nic.count.expected
+        name: nic
 networkPolicy:
   enabled: false
 nic-health-monitor:

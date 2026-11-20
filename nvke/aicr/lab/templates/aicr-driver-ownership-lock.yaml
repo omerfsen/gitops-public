@@ -1,0 +1,62 @@
+{{- /* AICR driver-ownership install-time guard. */ -}}
+{{- if hasKey .Values "gpuoperator" -}}
+{{- $aicrDriver0_0_3 := index .Values "gpuoperator" -}}
+{{- if kindIs "map" $aicrDriver0_0_3 -}}
+{{- if hasKey $aicrDriver0_0_3 "driver" -}}
+{{- $aicrDriver0_0_2 := index $aicrDriver0_0_3 "driver" -}}
+{{- if kindIs "map" $aicrDriver0_0_2 -}}
+{{- if hasKey $aicrDriver0_0_2 "enabled" -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.driver.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:driver.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.driver.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:driver.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.driver.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:driver.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- if hasKey .Values "gpuoperator" -}}
+{{- $aicrDriver0_1_3 := index .Values "gpuoperator" -}}
+{{- if kindIs "map" $aicrDriver0_1_3 -}}
+{{- if hasKey $aicrDriver0_1_3 "toolkit" -}}
+{{- $aicrDriver0_1_2 := index $aicrDriver0_1_3 "toolkit" -}}
+{{- if kindIs "map" $aicrDriver0_1_2 -}}
+{{- if hasKey $aicrDriver0_1_2 "enabled" -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.toolkit.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:toolkit.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.toolkit.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:toolkit.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.toolkit.enabled; set driver ownership at bundle time (aicr bundle --set gpuoperator:toolkit.enabled=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- if hasKey .Values "gpuoperator" -}}
+{{- $aicrDriver0_2_3 := index .Values "gpuoperator" -}}
+{{- if kindIs "map" $aicrDriver0_2_3 -}}
+{{- if hasKey $aicrDriver0_2_3 "hostPaths" -}}
+{{- $aicrDriver0_2_2 := index $aicrDriver0_2_3 "hostPaths" -}}
+{{- if kindIs "map" $aicrDriver0_2_2 -}}
+{{- if hasKey $aicrDriver0_2_2 "driverInstallDir" -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.hostPaths.driverInstallDir; set driver ownership at bundle time (aicr bundle --set gpuoperator:hostPaths.driverInstallDir=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.hostPaths.driverInstallDir; set driver ownership at bundle time (aicr bundle --set gpuoperator:hostPaths.driverInstallDir=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path gpu-operator.hostPaths.driverInstallDir; set driver ownership at bundle time (aicr bundle --set gpuoperator:hostPaths.driverInstallDir=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}
+{{- if hasKey .Values "dradriver" -}}
+{{- $aicrDriver1_0_2 := index .Values "dradriver" -}}
+{{- if kindIs "map" $aicrDriver1_0_2 -}}
+{{- if hasKey $aicrDriver1_0_2 "nvidiaDriverRoot" -}}
+{{- fail "install-time value intersects driver-ownership path nvidia-dra-driver-gpu.nvidiaDriverRoot; set driver ownership at bundle time (aicr bundle --set dradriver:nvidiaDriverRoot=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- else -}}
+{{- fail "install-time value intersects driver-ownership path nvidia-dra-driver-gpu.nvidiaDriverRoot; set driver ownership at bundle time (aicr bundle --set dradriver:nvidiaDriverRoot=...) so bundle-time ownership checks apply" -}}
+{{- end -}}
+{{- end -}}

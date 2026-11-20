@@ -21,7 +21,7 @@ spec:
                 {{- $dynamic := index .Values "nv-sentinel" | default dict -}}
                 {{- mustMergeOverwrite $static $dynamic | toYaml | nindent 16 }}
         repoURL: oci://ghcr.io/nvidia/nvsentinel
-        targetRevision: v1.28.0
+        targetRevision: v1.31.0
     syncPolicy:
         automated:
             prune: true

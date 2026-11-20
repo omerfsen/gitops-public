@@ -10,7 +10,7 @@ check your exact move, including any earlier boundary you would cross, run
 
 ## nodewright-operator: manual
 
-This bundle pins `v0.20.0`. Applies when upgrading from `<0.18.0` into `>=0.18.0 <=0.20.0`.
+This bundle pins `v0.21.0`. Applies when upgrading from `<0.18.0` into `>=0.18.0 <=0.21.0`.
 
 v0.18.0 renames skyhook.nvidia.com/v1alpha1 Skyhook to nodewright.nvidia.com/v1alpha1 NodeWright, moves DeploymentPolicy to the same group, and shifts the on-node annotation, label and finalizer prefix. An operator-side mirror migrates the objects for you, but completion status is then written only on the new kind and the attempt to mirror it back to the legacy object fails in a reconcile conflict loop, so Skyhook.status stays empty forever on a cluster where tuning has genuinely finished. Anything still reading the legacy status waits on a value that never arrives. The legacy object also goes read-only: the post-rename admission webhook rejects any spec, pause or disable change to it, so the first attempt to alter tuning after the upgrade fails rather than the cluster merely reporting the wrong status. Deletions and identical re-applies are still accepted, which is why a steady-state sync keeps working and the break only surfaces on a real edit.
 
@@ -37,6 +37,30 @@ v0.18.0 renames skyhook.nvidia.com/v1alpha1 Skyhook to nodewright.nvidia.com/v1a
 - https://github.com/NVIDIA/aicr/issues/2593
 - https://github.com/NVIDIA/aicr/issues/2594
 
+## kube-prometheus-stack: manual
+
+This bundle pins `84.5.0`. Applies when upgrading from `<84.5.0` into `84.5.0`.
+
+The upgrade deletes Grafana, Alertmanager, node-exporter, kube-state-metrics, the default rules and the dashboards. Prometheus stops loading PrometheusRules, Probes and ScrapeConfigs, keeps only the series AICR components query, and moves from its PVC to an emptyDir, so its history is lost.
+
+**Before you start:** Anything that reads this release's Grafana, Alertmanager or Prometheus history has another source, such as nktp.
+
+**Reversible:** yes. Redeploy the previous bundle. Remove nktp first: its node-exporter and this chart's both bind host port 9100.
+
+**Steps for argocd-helm:**
+
+1. `export`: Export any Grafana dashboards, Alertmanager configuration, and PrometheusRules you still need.\
+   *Why:* The upgrade deletes them.
+2. `upgrade`: Sync or reconcile the new bundle, upgrading this release before nktp.\
+   *Why:* nktp's node-exporter can't start while the old one holds host port 9100. The operator recreates Prometheus on an emptyDir, so prometheus-adapter's metrics are unavailable for about 30 seconds.
+3. `clean-up`: Delete what the release leaves behind: kubectl delete pvc --ignore-not-found -n monitoring prometheus-kube-prometheus-prometheus-db-prometheus-kube-prometheus-prometheus-0; kubectl delete secret --ignore-not-found -n monitoring kube-prometheus-admission; kubectl delete service --ignore-not-found -n kube-system kube-prometheus-kubelet.\
+   *Why:* The deployer doesn't own them: the StatefulSet created the PVC, a hook Job created the Secret, and the operator created the Service.
+
+**References:**
+
+- https://github.com/NVIDIA/aicr/blob/main/docs/design/026-nktp-telemetry-collection.md
+- https://github.com/NVIDIA/aicr/blob/main/docs/user/component-catalog.md#kube-prometheus-stack-8450-keeps-only-the-runtime-prometheus
+
 ## nfd: manual
 
 This bundle pins `0.20.1`. Applies when upgrading from `>=0.19.0 <0.20.1` into `0.20.1`.
@@ -61,28 +85,48 @@ This bundle pins `0.20.1`. Applies when upgrading from `>=0.19.0 <0.20.1` into `
 - https://github.com/kubernetes-sigs/node-feature-discovery/releases/tag/v0.20.0
 - https://github.com/kubernetes-sigs/node-feature-discovery/releases/tag/v0.20.1
 
-## nvsentinel: manual
+## nktp: manual
 
-This bundle pins `v1.28.0`. Applies when upgrading from `>=1.25.0 <1.28.0` into `1.28.0`.
+This bundle pins `0.2.0`. Applies when upgrading from `<0.2.0` into `0.2.0`.
 
-From v1.27.0 janitor records in GPUReset status.managedServices which GPU Operator services it stopped before a reset, and restores only those. The v1.26.0 GPUReset CRD does not declare the field, so the API server prunes it; janitor then rewrites the record every second and the reset never reaches its Job, leaving the node cordoned. It matters only where janitor runs, which is the nvsentinel-remediation step. On the observe step, the quarantine annotations v1.26.0 wrote carry no dry-run marker, so the new release reads each once as a manual uncordon and cancels the faults observed before the upgrade; and v1.26.0's dry run fed the circuit breaker, so a trip it persisted halts fault-quarantine once the cluster moves to a live step.
-
-**Before you start:** Where janitor runs (kubectl -n nvsentinel get deployment janitor finds it, as on the nvsentinel-remediation step), no GPUReset is in progress: kubectl get gpuresets.janitor.dgxc.nvidia.com -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.conditions[?(@.type=="Complete")].status}{"\n"}{end}' prints True for every GPUReset.
-
-**Reversible:** yes. helm rollback to the previous revision restores the previous workloads. The newer GPUReset CRD stays applied; it only adds an optional status field, which earlier janitor versions do not read. First remove the dry-run marker from every node (kubectl annotate nodes --all quarantineHealthEventDryRun-): earlier versions leave it in place, so a real quarantine it makes would carry the marker, and the next upgrade would discard that quarantine as a dry run and leave the node cordoned with no record. This rests on the CRD diff and upstream's notes; the rollback itself was not exercised.
+0.2.0 renames every Collector's OTLP exporter from otlp to otlp_grpc. An override under <collector>.otelcol.config.exporters.otlp, such as a backend endpoint or tls block, no longer reaches the exporter in use, so telemetry goes to the bundled otel-lgtm instead, or the bundle fails CheckNKTPExportersHaveBackend when otel-lgtm is disabled. The chart also moves from oci://ghcr.io/dsx-ai-factory/nvke/charts to the NGC Helm repository.
 
 **Steps for argocd-helm:**
 
-1. `apply`: Re-run install.sh (helm), or commit the regenerated bundle and reconcile or sync it (flux, argocd, argocd-helm).\
-   *Why:* These deployers apply the chart's CRDs themselves, then roll the DaemonSets and Deployments to v1.28.0.
-2. `reset-breaker`: If the cluster ran the observe step before v1.27.0 and this bundle moves it to a live step (quarantine or remediation), check kubectl get cm circuit-breaker -n nvsentinel -o jsonpath='{.data.status}'. If it prints TRIPPED, reset it with upstream's circuit-breaker runbook (docs/runbooks/circuit-breaker.md at v1.28.0), which patches the ConfigMap to CLOSED and restarts fault-quarantine.\
-   *Why:* v1.26.0's dry run fed the breaker, and a trip it persisted halts fault-quarantine at its first live start, so no fault is quarantined or released until the breaker is reset.
-3. `verify`: If janitor runs (kubectl -n nvsentinel get deployment janitor), kubectl get crd gpuresets.janitor.dgxc.nvidia.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.status.properties.managedServices.type}' prints object. Without janitor the chart renders no GPUReset CRD and there is nothing to check.\
-   *Why:* Confirms the deployer applied the new CRD; the stall shows only when a reset runs.
+1. `rename-exporter-overrides`: Before regenerating the bundle, rename every nktp override path containing otelcol.config.exporters.otlp. to otelcol.config.exporters.otlp_grpc., in --set flags and in any recipe overlay.\
+   *Why:* The old key defines an otlp exporter no pipeline uses, so the override is accepted and silently ignored.
+2. `mirror-chart-and-images`: Only when the cluster installs from a mirror: mirror chart nktp 0.2.0 from https://helm.ngc.nvidia.com/nvidia, and the images otel/opentelemetry-collector-k8s:0.164.0, grafana/otel-lgtm:0.38.0, and registry.k8s.io/kubectl:v1.35.10, before upgrading.\
+   *Why:* The bundle now names the NGC repository, and the collectors, the evaluation backend, and the chart's hook Jobs pull these images. Without them the release fails to fetch or its pods stay in ImagePullBackOff.
 
 **References:**
 
-- https://github.com/NVIDIA/NVSentinel/releases/tag/v1.27.0
-- https://github.com/NVIDIA/NVSentinel/releases/tag/v1.28.0
-- https://github.com/NVIDIA/NVSentinel/pull/1989
-- https://github.com/NVIDIA/NVSentinel/blob/v1.28.0/docs/configuration/fault-quarantine.md
+- https://github.com/NVIDIA/aicr/blob/main/docs/user/component-catalog.md#nktp-telemetry-pipeline
+- https://github.com/dsx-ai-factory/nvke-telemetry-pipeline/tree/main/nktp
+
+## nvsentinel: manual
+
+This bundle pins `v1.31.0`. Applies when upgrading from `>=1.28.0 <1.31.0` into `1.31.0`.
+
+Three changes need operator action. A fatal health-events-analyzer event now cordons and drains its node through a new default fault-quarantine rule set, where v1.28.0 set only a node condition; it applies when the analyzer's effective processingStrategy is EXECUTE_REMEDIATION. With the remediation step and R610 or later drivers, XID 154 recovery actions now reset the GPU or reboot the node, where v1.28.0 reported CONTACT_SUPPORT. A custom generic-provider rebootImage without sh and cat no longer reboots nodes.
+
+**Before you start:** Where health-events-analyzer is deployed, its module-level processingStrategy and the processing_strategy of every enabled rule are neither EXECUTE_REMEDIATION nor UNSPECIFIED (an absent module value is the chart default, EXECUTE_REMEDIATION, and platform-connectors converts UNSPECIFIED to it), or fault-quarantine.ruleSets is set without the "Health events analyzer fatal error ruleset", or you accept that fatal analyzer events cordon and drain nodes from v1.31.0. Where the remediation step is composed and nodes run R610 or later drivers, you accept that an XID 154 recovery action resets the GPU or reboots the node, or you keep syslog-health-monitor events out of remediation. Where janitor-provider.csp.generic.rebootImage is a custom image, it contains sh and cat.
+
+**Reversible:** yes. helm rollback to the previous revision restores the previous workloads; the HealthEvent CRD only gains optional status fields, and the other CRDs differ only in an annotation. A cordon that the new rule set created survives the rollback: release it with kubectl uncordon once the node is safe to return. The rollback itself was not exercised in this record's lanes.
+
+**Steps for argocd-helm:**
+
+1. `check-analyzer-strategy`: Where health-events-analyzer is deployed, read the effective strategies from the nv-sentinel values in the bundle: the module-level processingStrategy, and the processing_strategy of each enabled rule in health-events-analyzer.config, which replaces the module value for that rule when it is set. An absent module value is the chart default, EXECUTE_REMEDIATION, not STORE_ONLY: only the nvsentinel-health-events-analyzer mixin sets STORE_ONLY. UNSPECIFIED counts as EXECUTE_REMEDIATION too, because platform-connectors converts it. Also read fault-quarantine.ruleSets: when set, it replaces the chart's list, and the v1.31.0 rule set that cordons for a fatal analyzer event applies only while the effective list still contains "Health events analyzer fatal error ruleset". If a strategy above is EXECUTE_REMEDIATION and that rule set is present, a fatal analyzer event cordons and drains its node: accept that, or keep the v1.28.0 condition-only behavior by setting fault-quarantine.ruleSets to the chart's v1.31.0 default list without that rule set (carry every other rule set, since the list replaces the default). Setting STORE_ONLY instead also removes the node condition and the Kubernetes Event that EXECUTE_REMEDIATION set, so alerts that read them stop; set it at the module level and change or remove every enabled rule's own processing_strategy: EXECUTE_REMEDIATION, because a rule that keeps it still cordons and drains.\
+   *Why:* The new default rule set cordons for a fatal analyzer event, and fault-quarantine reads only EXECUTE_REMEDIATION events, so that strategy, set or inherited, is what turns a condition-only signal into a drain.
+2. `check-xid-154-actions`: Where the nvsentinel-remediation step is composed and any node runs an R610 or later driver, expect an XID 154 recovery action (PF FLR, OS Reboot, Bus Reset or System Reboot) to reset that GPU or reboot the node, where v1.28.0 cordoned and drained the node for the fatal event and repaired nothing. No setting restores that: the monitor's action mapping has no per-XID switch. To stop syslog events from acting at all, regenerate the bundle with --set nv-sentinel:syslog-health-monitor.processingStrategy=STORE_ONLY, which also stops their cordon and drain and keeps them from the analyzer's rules, since STORE_ONLY events are not analyzer input, and read the processingStrategy of each NIC pattern in the monitor's config, because a pattern's own value replaces the module's.\
+   *Why:* v1.31.0 maps the R610 wordings to COMPONENT_RESET and RESTART_BM, which fault-remediation acts on; v1.28.0 mapped them to CONTACT_SUPPORT, which it does not.
+3. `check-reboot-image`: Where the nvsentinel-remediation step is composed with janitor-provider.csp.provider: generic, read janitor-provider.csp.generic.rebootImage in the bundle. The shipped BusyBox image is compatible. A custom image must contain sh and cat: the v1.31.0 reboot Job first reads the host boot ID with cat and refuses to reboot when it cannot, which v1.28.0 did not do. Check the image with kubectl run reboot-image-check --rm -i --restart=Never --image=<image> -- sh -c 'cat /proc/sys/kernel/random/boot_id'.\
+   *Why:* A reboot image without cat makes every reboot Job exit non-zero before it reboots, so RESTART_VM and RESTART_BM repairs never reboot the node.
+4. `apply`: Re-run install.sh (helm), or commit the regenerated bundle and reconcile or sync it (flux, argocd, argocd-helm).\
+   *Why:* These deployers apply the chart's CRDs themselves, then roll the DaemonSets and Deployments to v1.31.0.
+
+**References:**
+
+- https://github.com/NVIDIA/NVSentinel/releases/tag/v1.29.0
+- https://github.com/NVIDIA/NVSentinel/releases/tag/v1.30.0
+- https://github.com/NVIDIA/NVSentinel/releases/tag/v1.31.0
+- https://github.com/NVIDIA/NVSentinel/blob/v1.31.0/docs/deprecations/gpu-health-monitor-dcgm-3-support-removal.md

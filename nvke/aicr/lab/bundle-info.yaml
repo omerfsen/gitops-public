@@ -2,9 +2,9 @@ apiVersion: aicr.run/v1
 build:
   deployer: argocd-helm
   recipe:
-    digest: sha256:80652d027453cb813d7a6a5adefd60f3d9f95c77cdae1b9f5249d899854ea3a4
+    digest: sha256:bab108eb5794e021a908c5146011ced8763e4b91466cc080b1468a620d0291b8
     path: recipe.yaml
-    version: 1.2.0
+    version: 1.3.0
   settings:
     appName: aicr-stack
     attested: false
@@ -63,20 +63,25 @@ layout:
       name: kai-scheduler
       namespace: kai-scheduler
       path: 008-kai-scheduler
+    - component: nktp
+      manifest: templates/nktp.yaml
+      name: nktp
+      namespace: nktp
+      path: 009-nktp
     - component: nvidia-dra-driver-gpu
       manifest: templates/nvidia-dra-driver-gpu.yaml
       name: nvidia-dra-driver-gpu
       namespace: nvidia-dra-driver
-      path: 009-nvidia-dra-driver-gpu
+      path: 010-nvidia-dra-driver-gpu
     - component: nvsentinel
       manifest: templates/nvsentinel.yaml
       name: nvsentinel
       namespace: nvsentinel
-      path: 010-nvsentinel
+      path: 011-nvsentinel
     - component: prometheus-adapter
       manifest: templates/prometheus-adapter.yaml
       name: prometheus-adapter
       namespace: monitoring
-      path: 011-prometheus-adapter
+      path: 012-prometheus-adapter
 metadata:
-  version: 1.2.0
+  version: 1.3.0

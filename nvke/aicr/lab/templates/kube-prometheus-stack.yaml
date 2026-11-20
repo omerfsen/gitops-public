@@ -21,7 +21,7 @@ spec:
                 {{- $dynamic := index .Values "prometheus" | default dict -}}
                 {{- mustMergeOverwrite $static $dynamic | toYaml | nindent 16 }}
         repoURL: https://prometheus-community.github.io/helm-charts
-        targetRevision: 84.4.0
+        targetRevision: 84.5.0
     syncPolicy:
         automated:
             prune: true
