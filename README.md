@@ -37,6 +37,10 @@ The UI: `kubectl -n argocd port-forward svc/argocd-server 8080:80`, user
 AICR's `nvke` recipe plus the overrides NVKE and the lab need (driver
 615.71.09, the containerd toolkit setting, no NIC health monitor):
 
+Since AICR v1.3.0 the stack includes NKTP (telemetry), which needs bigger lab VMs
+than omerfsen.nvke's defaults: 6 vCPU / 16 GiB nodes and a 12 vCPU / 32 GiB GPU
+node (`nvke_kvm_vm_sizes`, see omerfsen.aicr's README).
+
 ```shell
 cd ~/projects/aicr
 ansible-playbook playbooks/gitops.yml \
